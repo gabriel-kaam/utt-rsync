@@ -1,0 +1,122 @@
+\documentclass[a4paper,12pt]{report}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[francais]{babel}
+\usepackage[top=2cm, bottom=2cm, left=2cm, right=2cm]{geometry}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage[pdfpagelabels]{hyperref}
+\hypersetup{urlcolor=blue,linkcolor=black,citecolor=black,colorlinks=true}
+\pagestyle{fancy}
+\setlength{\headheight}{15pt}
+\renewcommand{\headrulewidth}{0cm}
+\lfoot{}
+\lhead{LO14}
+\rhead{Gabriel KAAM}
+\rfoot{}
+
+\title{Rapport de projet LO14\\Synchroniseur de systèmes de fichiers}
+\author{Gabriel KAAM}
+\date{\today}
+
+\begin{document}
+	\maketitle	
+	\tableofcontents
+	\chapter{Introduction}
+		\section{Préambule}
+			\begin{onehalfspace}
+				Que l'on utilise fréquemment ou non un ordinateur, nous sommes constemment amenés à manipuler toutes sortes de fichiers: photos de famille, de voyages, compte rendu de réunion, de projet\ldots Il nous arrive parfois de copier ces fichiers vers un autre support de stockage pour quelque raison que ce soit : besoin de documents au bureau, un échange de musiques en amis, transport de fichiers sur clé USB. Une copie implique ainsi l'apparition deux “ versions ” d'un (ou de plusieurs) même fichier : le fichier original, et le fichier qui a été copié.
+				Si l'un des deux fichiers est modifié, il faudra manuellement le re-copier pour mettre à jour l'original : il faut donc attendre d'avoir accès à l'original (rentrer du travail par exemple) et de penser à effectuer la mise-à-jour. Un travail qui devient vite fastidieux si l'on considère un nombre important de fichiers. Il devient encore plus complexe si les deux fichiers (l'original et la copie) ont été modifiés individuellement, il faudrait alors manuellement procéder à une analyse des deux fichiers pour trouver le fichier à conserver, et celui à écraser. Tout ceci représente une perte de temps pour l'informaticien qui préfèrera consacrer son temps à d'autres activiées plus intéressantes.
+
+				Le but d'un synchroniseur de fichiers est d'épargner à l'utilisateur les peines causées par la création de nouvelles versions de fichier en s'assurant que les fichiers stockés en un point A soient identiques aux fichiers stockées en un point B, on dira que \textbf{A et B sont synchronisés}. Dans le cadre de l'\textbf{UV LO14}, il nous a été demandé de concevoir un synchroniseur de systèmes de fichiers, devant entièrement être réalisé en language \textbf{Bash}.
+			\end{onehalfspace}
+			\clearpage
+		\section{Concept}
+			\begin{onehalfspace}
+				L'objectif du projet est donc de réaliser un synchoniseur de systèmes de fichiers en language Bash. Concrètement nous devons créer un script Bash capable de synchroniser deux répertoires fournis en paramètres. Cette synchronisation repose sur l'analyse de 3 éléments :
+				\begin{itemize}
+					\item L'arboréscence du premier répertoire (ce répertoire sera nommé \textbf{la source})
+					\item L'arboréscence du second répertoire (ce répertoire sera nommé \textbf{la destination})
+					\item Un fichier log (ou \textbf{logfile}), mis à jour à la fin de chaque synchronisation et contenant la liste des fichiers ayant été synchronisés
+				\end{itemize}
+
+				\vspace{0.5cm}
+
+				La synchronisation de deux répertoires données (i.e : A et B) s'effectue par la comparaison en parallèle des arboréscences de A et B. Lorsque deux verions différentes d'un fichier \textbf{p} sont présentes dans A et dans B, c'est qu'il y a eu modification du fichier. Cette modification peut porter sur le contenu du fichier, mais également sur les \textbf{métadonnées} du fichier. Par “ métadonnées ”, nous entendons le type (il peut s'agir d'un fichier régulier ou d'un répertoire), la taille, les permissions et la date de la dernière modification du fichier. Lorsque qu'une différence existe entre p/A et p/B (p/A : version du fichier p présente dans A, et resp pour p/B), on se réfère au filelog pour déterminer quelle version du fichier p sera conservée et laquelle sera écrasée. C'est assez simple en effet, si les versions \textbf{p/A} et \textbf{p/B} diffèrent, mais que \textbf{p/A} corresponds à la version de p stockée dans le fileLog (autrement dit \textbf{p/A} corresponds à la version de p présente lors de la dernière synchronisation) : c'est que p/B a été modifié. On peut donc écraser \textbf{p/B} avec \textbf{p/A}.
+				Grossièrement la synchronisation se passe comme décrite ci-dessus, mais il arrive que des conflits existent entre des fichiers : fichier supprimé, déplacé, création/suppression de répertoire, fichier modifié dans A et dans B etc. C'est le rôle du synchroniseur de fichiers de détecter ses conflits et de les résoudre.
+			\end{onehalfspace}
+
+
+	\chapter{Développement}
+		\section{Fonctionnement}
+			\begin{onehalfspace}
+				Précédemment nous avons parlé d'une comparaison en parallèle de l'arboréscence de deux répertoires : ce n'est en vérité pas la solution d'implémentation qui a été choisie ici. Tout d'abord nous ne travaillons pas seulement avec les arboréscences des répertoires, mais avec un listing du contenu des répertoires. Ce listing associe à chaque élément, des informations présentants de manière précise et pertinente sur la nature du fichier. Voici un exemple d'un listing généré lors de l'analyse d'un répertoire :
+				\begin{lstlisting}
+	d,775,1335543270,4096,./foo
+	f,664,1335543270,0,./foo/TEST
+				\end{lstlisting}
+				Chaque ligne de ce listing contient donc des informations concernant un fichier trouvé lors de l'analyse. Nous appelerons une ligne de ce listing, le \textbf{fileID} du fichier du fichier analysé.
+				
+				\vspace{0.5cm}
+
+				Un fileID (file IDentification) est une chaine de caractère qui associe à un fichier à ses metadonnées. Cette chaîne est composée de 5 champs séparés par une virgule “ , ” :
+				\begin{description}
+					\item[Le type] peut être 'd' pour un dossier ou 'f' pour un fichier régulier
+					\item[Les permissions] du fichiers au format octal
+					\item[Le timestamp] de la dernière modification du fichier
+					\item[La taille] du fichier, en octet
+					\item[Le chemin du fichier], relatif au chemin du dossier à synchroniser
+				\end{description}
+				
+				\vspace{0.5cm}
+				
+				Après avoir établit le listing des deux dossiers à synchroniser (i.e : A et B) nous recherchons pour chaque fileID de A, une correspondace dans le listing de B (la recherche porte uniquement sur le chemin du fichier). Pour extraire du fileID le chemin du fichier, nous utilisons la commande \textbf{cut}, cela est rendu possible par la séparation de chaque champ de notre fileID par un catactère connu : la virgule.
+				
+				Si on ne trouve pas de correspondance à p/A dans B, c'est que p/B n'existe pas. Dans ce cas, il y a deux cas possibles : p/A a été créé depuis la dernière synchronisation OU p/B a été supprimé. Pour déterminer le cas dans lequel nous nous trouvons, nous cherchons à nouveau une correspondance à p/A mais cette fois dans le fileLog.
+				
+				Si aucune correspondace n'est trouvée, c'est que p/A n'éxistait pas lors de la dernière synchronisation, il s'agit donc d'un nouveau fichier. On peut donc effectuer sa copie vers B, sans oublier de conserver les metadonnées de p/A. Si par contre on trouve une correspondance dans le fileLog, c'est que p/B a été supprimé. On doit donc supprimer p/A, par mesure de sécurité une confirmation est demandée à l'utilisateur.
+
+				\vspace{0.5cm}
+
+				Dans le cas où une correspondance à p/A est trouvée dans B, on vérifie dans un premier temps si p/A et p/B sont de même types. Cette opération est réalisée très facilement avec l'utilisation de la commande cut et des fileID de p/A et de p/B.
+
+				Si le type de p/A et p/B diffèrent, il y a \textbf{conflit}. Mais nous ne somme pas en mesure de régler ce genre de conflit, nous avertissons seulement l'utilisateur qu'un conflit de \textbf{T}ype \textit{(conflit de type T)} est présent.
+
+				Si p/A et p/B sont tout deux des répertoires, il n'y a rien à faire, nous ne synchronisons ici que les fichiers. \textit{Rmq : Une synchronisation des metadonnées des répertoires seraient possible, mais ce n'est pas le but de l'exercice.}
+
+				Si p/A et p/B sont tout deux des fichiers réguliers, on compare leur fileID. S'ils sont identiques, on assume que les fichiers sont les mêmes. Si le fileID est également égal à celui du logFile, on s'arrête là: les deux fichiers sont bien synchronisés.
+
+				Par contre, si les fileID de p/A et de p/B sont les même, mais ne correspondont pas au fileID contenu dans le logFile, on a un conflit sur le \textbf{L}ogFile \textit{(conflit de type L)}. Il peut être corrompu, ou bien il s'agit tout simplement de la première synchronisation (le logFile est donc vide). On interroge donc l'utilisateur sur l'action à effectuer : corriger le logFile ou le laisser tel-quel avec la quasi-certitude qu'un conflit sera relevé lors de la prochaine synchronisation.
+
+				Si les fileID de p/A et de p/B diffèrent, on vérifie si l'un deux est présent dans le logFile. Si c'est le cas, c'est que c'est l'autre fichier qui a été modifié, et qu'il faut donc garder. On effectue donc une copie du nouveau fichier en écrasant l'ancien. On n'oublie pas de mettre à jour le logFile.
+				Si aucun des deux fileID n'est présent dans le logFile, on compare les deux fichiers p/A et p/B grace à la commande \textbf{diff}. Si les deux fichiers ont le même contenu, c'est qu'un des fichiers a eu ses metadonnées altérées : on a un conflit de \textbf{M}eta \textit{(conflit de type M)}. Or on sait déjà qu'elles ne sont pas présentes dans le logFile, nous sommes obligés de demander à l'utilisateur s'il désire copier les meta d'un des deux fichiers vers l'autre. Si c'est le cas, les metas sont dupliquées, et le logFile est mis à jour.
+				Si le contenu des deux fichiers est différent, on a un conflit de \textbf{C}ontenu \textit{(conflit de type C)}. On propose à l'utilisateur d'afficher le contenu des deux fichiers côte-à-côte. Il peut ensuite décider la version fichier qu'il souhaite conserver.
+			\end{onehalfspace}
+			\clearpage
+		\section{Arguments}
+			\begin{onehalfspace}
+				Le script est configurable à souhait et son comportement face aux différents conflits peut être défini à l'avance grace aux différentes arguments qu'il accepte. En voici la liste exhaustive, les différentes options qu'ils acceptent et leur influence sur le comportement du script.
+
+				\vspace{0.2cm}
+
+				\begin{description}
+					\item[-h, --help] Affiche un message d'aide dans la console
+					\item[-o, --output=FILE] Écrire tout les messages dans le fichier FILE
+					\item[-x, --exclude=PATTERN] Exclus tout les fichiers ou répertoires correspondant à PATTERN
+					\item[-c, --content=CHOICE] Quel fichier sera préservé lors d'un conflit de \textbf{C}ontenu?\\CHOICE peut être 'source', 'destination' ou 'both'. Defaut : sur confirmation
+					\item[-l, --logfile=PATH] Chemin vers votre fichier de log. Défault : '~/.syncro'
+					\item[-p, --pidfile=PATH] Écrire le PID du daemon dans ce fichier. Défault : '~/.syncro\_pid'
+					\item[-m, --meta=CHOICE] Quel fichier sera préservé lors d'un conflit de \textbf{M}eta?\\CHOICE peut être 'source', 'destination' ou 'both'. Défaut : sur confirmation
+					\item[-d, --delete=[yes,no]] Si oui ou non une suppression doit être répliquée d'un répertoire à l'autre. Attention danger ! Défaut : sur confirmation
+					\item[-f, --fix=[yes,no]] Si oui ou non le fichier de log doit être corrigé si une erreur est détéctée. Default : sur confirmation
+					\item[-b, --background] Lancer en arrière-plan
+					\item[-i, --initial] Ignore le fichier de log (simule une première synchronisation)
+					\item[-r, --dereference] Les liens symboliques seront déréférençés. Default : non
+					\item[-q, --quiet] Supprime les messages qui ne sont pas des erreurs
+					\item[-v, --verbose] Affiche plus d'informations
+				\end{description}
+			\end{onehalfspace}
+			\clearpage
+\end{document}
