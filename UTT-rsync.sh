@@ -62,13 +62,6 @@ function getTime() {
 	[ $# -eq 1 ] && echo $1 | cut -d',' -f3
 }
 
-# Extract the size from the fileID
-# usage : getSize fileID
-#		fileID		The fileID to work on
-function geSize() {
-	[ $# -eq 1 ] && echo $1 | cut -d',' -f3
-}
-
 # Extract the name from the fileID
 # usage : getName fileID
 #		fileID		The fileID to work on
