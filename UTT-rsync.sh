@@ -31,14 +31,24 @@ function scanDir() {
 	cd "$1"
 	# 'find' is fine here, to be recursive and to handle hidden files
 	for i in `find . | tail -n+2`; do
-		t="d"; [ -d "$i" ] || t="f"
-		if $FOLLOW; then
-			echo $t,`stat --dereference --printf="%a,%Y,%s,%n" "$i"`
-		else
-			echo $t,`stat --printf="%a,%Y,%s,%n" "$i"`
-		fi
+		fileID "$i"
 	done
 	cd ..
+}
+
+# Get a fileID
+# usage : fileID path
+#		path 	Path of the file or directory to get the fileID from
+function fileID() {
+	while [ -n "$1" ]; do
+		t="d"; [ -d "$1" ] || t="f"
+		if $FOLLOW; then
+			echo $t,`stat --dereference --printf="%a,%Y,%s,%n" "$1"`
+		else
+			echo $t,`stat --printf="%a,%Y,%s,%n" "$1"`
+		fi
+		shift
+	done
 }
 
 # Extract the type from the fileID
@@ -571,6 +581,8 @@ fi
 
 SRC="$1"
 DST="$2"
+
+[ -d "$DST" ] || mkdir -m "`getRigh $(fileID "$SRC")`" "$DST" 2>>/dev/null
 
 touch "$EXCLUDE"
 touch "$CONFLIC"
